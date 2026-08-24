@@ -1,0 +1,85 @@
+metric,vintage,n,psi,flag
+predicted_pd,2016Q1,77516,0.0107,stable
+predicted_pd,2016Q2,62949,0.0062,stable
+predicted_pd,2016Q3,60891,0.0234,stable
+predicted_pd,2016Q4,57331,0.017,stable
+predicted_pd,2017Q1,46874,0.0118,stable
+predicted_pd,2017Q2,44492,0.0082,stable
+predicted_pd,2017Q3,43854,0.0049,stable
+predicted_pd,2017Q4,34101,0.0074,stable
+predicted_pd,2018Q1,22530,0.0248,stable
+predicted_pd,2018Q2,18449,0.0228,stable
+predicted_pd,2018Q3,10309,0.0386,stable
+predicted_pd,2018Q4,5030,0.062,stable
+int_rate,2016Q1,77516,0.1562,moderate shift
+int_rate,2016Q2,62949,0.122,moderate shift
+int_rate,2016Q3,60891,0.1897,moderate shift
+int_rate,2016Q4,57331,0.1462,moderate shift
+int_rate,2017Q1,46874,0.163,moderate shift
+int_rate,2017Q2,44492,0.0796,stable
+int_rate,2017Q3,43854,0.2086,moderate shift
+int_rate,2017Q4,34101,0.2403,moderate shift
+int_rate,2018Q1,22530,0.2383,moderate shift
+int_rate,2018Q2,18449,0.1742,moderate shift
+int_rate,2018Q3,10309,0.1213,moderate shift
+int_rate,2018Q4,5030,0.1678,moderate shift
+dti,2016Q1,77516,0.0307,stable
+dti,2016Q2,62949,0.0119,stable
+dti,2016Q3,60891,0.002,stable
+dti,2016Q4,57331,0.0046,stable
+dti,2017Q1,46874,0.001,stable
+dti,2017Q2,44492,0.0022,stable
+dti,2017Q3,43854,0.0068,stable
+dti,2017Q4,34101,0.0294,stable
+dti,2018Q1,22530,0.0396,stable
+dti,2018Q2,18449,0.0451,stable
+dti,2018Q3,10309,0.0369,stable
+dti,2018Q4,5030,0.0445,stable
+revol_util,2016Q1,77516,0.0241,stable
+revol_util,2016Q2,62949,0.0667,stable
+revol_util,2016Q3,60891,0.0641,stable
+revol_util,2016Q4,57331,0.0643,stable
+revol_util,2017Q1,46874,0.0717,stable
+revol_util,2017Q2,44492,0.1062,moderate shift
+revol_util,2017Q3,43854,0.1382,moderate shift
+revol_util,2017Q4,34101,0.2843,significant shift
+revol_util,2018Q1,22530,0.3611,significant shift
+revol_util,2018Q2,18449,0.3911,significant shift
+revol_util,2018Q3,10309,0.4103,significant shift
+revol_util,2018Q4,5030,0.4845,significant shift
+annual_inc,2016Q1,77516,0.0041,stable
+annual_inc,2016Q2,62949,0.0018,stable
+annual_inc,2016Q3,60891,0.0055,stable
+annual_inc,2016Q4,57331,0.0102,stable
+annual_inc,2017Q1,46874,0.019,stable
+annual_inc,2017Q2,44492,0.0101,stable
+annual_inc,2017Q3,43854,0.0047,stable
+annual_inc,2017Q4,34101,0.0062,stable
+annual_inc,2018Q1,22530,0.0096,stable
+annual_inc,2018Q2,18449,0.0116,stable
+annual_inc,2018Q3,10309,0.0211,stable
+annual_inc,2018Q4,5030,0.0372,stable
+loan_to_income,2016Q1,77516,0.0011,stable
+loan_to_income,2016Q2,62949,0.0046,stable
+loan_to_income,2016Q3,60891,0.0196,stable
+loan_to_income,2016Q4,57331,0.0406,stable
+loan_to_income,2017Q1,46874,0.0288,stable
+loan_to_income,2017Q2,44492,0.0412,stable
+loan_to_income,2017Q3,43854,0.0472,stable
+loan_to_income,2017Q4,34101,0.0579,stable
+loan_to_income,2018Q1,22530,0.0728,stable
+loan_to_income,2018Q2,18449,0.0878,stable
+loan_to_income,2018Q3,10309,0.1109,moderate shift
+loan_to_income,2018Q4,5030,0.1832,moderate shift
+credit_utilization,2016Q1,77516,0.0241,stable
+credit_utilization,2016Q2,62949,0.0667,stable
+credit_utilization,2016Q3,60891,0.0641,stable
+credit_utilization,2016Q4,57331,0.0643,stable
+credit_utilization,2017Q1,46874,0.0717,stable
+credit_utilization,2017Q2,44492,0.1062,moderate shift
+credit_utilization,2017Q3,43854,0.1382,moderate shift
+credit_utilization,2017Q4,34101,0.2843,significant shift
+credit_utilization,2018Q1,22530,0.3611,significant shift
+credit_utilization,2018Q2,18449,0.3911,significant shift
+credit_utilization,2018Q3,10309,0.4103,significant shift
+credit_utilization,2018Q4,5030,0.4845,significant shift

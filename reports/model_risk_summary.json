@@ -1,0 +1,26 @@
+{
+  "generated_at": "2026-08-24T11:33:55.741327+00:00",
+  "oot_test_period": {
+    "start": "2016-10-01",
+    "end": "2018-12-01"
+  },
+  "pd_model": {
+    "roc_auc": 0.7131,
+    "gini_coefficient": 0.4262,
+    "ks_statistic": 0.3097,
+    "brier_score": 0.1545
+  },
+  "lgd_model": {
+    "rmse": 0.2046,
+    "mae": 0.1724
+  },
+  "population_stability": {
+    "moderate_threshold": 0.1,
+    "significant_threshold": 0.25,
+    "n_flagged_moderate_or_worse": 27,
+    "report_csv": "reports/psi_report.csv"
+  },
+  "artifacts": {
+    "calibration_curve_png": "reports/calibration_curve.png"
+  }
+}

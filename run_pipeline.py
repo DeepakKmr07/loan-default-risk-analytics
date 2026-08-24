@@ -1,7 +1,9 @@
 """Master orchestration script: ETL -> Train PD/LGD -> Inference -> Curated Star Schema.
 
 Run with the project's system Python (see DEVELOPMENT.md "Environment Setup" — no venv/conda here):
-    "C:\\Program Files\\Python313\\python.exe" run_pipeline.py
+    "C:\\Program Files\\Python313\\python.exe" run_pipeline.py                  # full pipeline
+    "C:\\Program Files\\Python313\\python.exe" run_pipeline.py --stress-test    # + stress-test scenarios
+    "C:\\Program Files\\Python313\\python.exe" run_pipeline.py --test           # run the pytest suite only
 
 Note: this assumes `data/raw/loans_raw.parquet` already exists (run `src/data/download.py`
 once, with Kaggle API credentials configured, to produce it).
@@ -9,7 +11,9 @@ once, with Kaggle API credentials configured, to produce it).
 
 from __future__ import annotations
 
+import argparse
 import logging
+import sys
 from pathlib import Path
 
 import duckdb
@@ -17,12 +21,14 @@ import duckdb
 from src.bi.build_marts import build_marts
 from src.data.etl_duckdb import run_etl
 from src.models import inference, train_lgd, train_pd
+from src.models.stress_test import run_stress_test
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 SCORED_PORTFOLIO_PATH = PROJECT_ROOT / "data" / "processed" / "scored_portfolio.parquet"
+TESTS_DIR = PROJECT_ROOT / "tests"
 
 
 def print_portfolio_summary(path: Path = SCORED_PORTFOLIO_PATH) -> None:
@@ -68,7 +74,31 @@ def print_portfolio_summary(path: Path = SCORED_PORTFOLIO_PATH) -> None:
     print("=" * 60 + "\n")
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Credit risk pipeline orchestration")
+    parser.add_argument(
+        "--test", action="store_true", help="Run the automated pytest suite instead of the pipeline"
+    )
+    parser.add_argument(
+        "--stress-test", action="store_true",
+        help="Also run macroeconomic stress-test scenarios (Baseline/Adverse/Severely Adverse) after the marts are built",
+    )
+    return parser.parse_args()
+
+
+def run_test_suite() -> int:
+    """Run the pytest suite and return its exit code (0 = all passed)."""
+    import pytest
+
+    return pytest.main([str(TESTS_DIR), "-v"])
+
+
 def main() -> None:
+    args = parse_args()
+
+    if args.test:
+        sys.exit(run_test_suite())
+
     logger.info("STEP 1/4: ETL")
     run_etl()
 
@@ -81,6 +111,10 @@ def main() -> None:
 
     logger.info("STEP 4/4: Build curated Star Schema marts")
     build_marts()
+
+    if args.stress_test:
+        logger.info("STEP 5/5: Run macroeconomic stress-test scenarios")
+        run_stress_test()
 
     print_portfolio_summary()
 

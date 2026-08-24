@@ -22,6 +22,13 @@ library ready for Power BI, with a calibrated machine-learning core in the middl
   `Dim_Vintage`, and `Dim_Credit_Grade` dimensions, exported as Parquet for Power BI.
 - **DAX measure library:** production-ready measures for Total EAD, Weighted PD, Total Expected
   Loss, EL Rate %, vintage-over-vintage Risk Migration, and What-If stress-testing scenarios.
+- **Model governance:** a calibration reliability diagram, Gini/KS/ROC-AUC discrimination
+  metrics, and Population Stability Index (PSI) monitoring for both predicted PD and key credit
+  features across origination vintages — the diagnostics Basel/IFRS 9 model-risk review expects.
+- **Macroeconomic stress testing:** Baseline / Adverse / Severely Adverse scenario simulation
+  (CCAR-style PD/LGD/EAD shocks) exported as its own Parquet fact table for Power BI.
+- **Automated test suite:** pytest coverage for ETL data contracts, star-schema referential
+  integrity, and the PSI/KS/calibration statistics themselves.
 
 ## Results (full 2007–2018 accepted-loans portfolio)
 
@@ -40,11 +47,43 @@ Overall portfolio EL rate: **15.77%**. The PD model scores **0.713 ROC-AUC / 0.3
 Brier score** on the out-of-time test set (loans issued Oct 2016–Dec 2018, held out entirely from
 training and calibration). The LGD model scores **0.205 RMSE / 0.172 MAE** on realized recoveries.
 
+## Model governance & stability (`reports/model_risk_summary.json`)
+
+| Metric | Value |
+|---|---:|
+| Gini coefficient (2×AUC−1) | 0.4262 |
+| KS statistic | 0.3097 |
+| ROC-AUC (OOT) | 0.7131 |
+| Brier score (OOT) | 0.1545 |
+| LGD RMSE / MAE (OOT) | 0.2046 / 0.1724 |
+
+The calibration reliability diagram (`reports/calibration_curve.png`) tracks the perfect-
+calibration diagonal closely across all 10 deciles. PSI monitoring (`reports/psi_report.csv`,
+baseline = training/development sample vs. each post-training vintage) flags **27 moderate-or-
+worse shifts**, concentrated in `int_rate` (moderate drift from 2016 onward — LendingClub's
+pricing shifted over time) and `revol_util`/`credit_utilization` (significant drift from 2017Q4
+onward — a known reporting change in LendingClub's later vintages). This is exactly the kind of
+real, explainable population drift a PSI monitor is supposed to catch.
+
+## Stress testing (`data/curated/Fact_Stress_Test_Scenarios.parquet`)
+
+| Scenario | Shock | Weighted PD | Total Expected Loss |
+|---|---|---:|---:|
+| Baseline | none | 25.07% | $5.36B |
+| Adverse | PD ×1.25, LGD ×1.15 | 31.33% | $7.71B |
+| Severely Adverse | PD ×1.60, LGD ×1.25, +20% CCF on undrawn exposure | 40.01% | $10.68B |
+
+EAD is unchanged across scenarios: LendingClub loans are fully-disbursed installment loans with
+no revolving/undrawn commitment, so the CCF term has no effect on this particular portfolio — the
+mechanism is implemented generally in `stress_test.py` for portfolios that do carry revolving
+exposure.
+
 ## Tech stack
 
 - **Storage / ETL:** DuckDB, PyArrow
 - **Modeling:** Python, scikit-learn, LightGBM, XGBoost, Optuna
 - **BI:** Star-schema Parquet marts + a full DAX measure library, designed for Power BI
+- **Testing:** pytest
 
 ## Project structure
 
@@ -52,7 +91,7 @@ training and calibration). The LGD model scores **0.205 RMSE / 0.172 MAE** on re
 ├── data/
 │   ├── raw/          # loans_raw.parquet (converted from the LendingClub CSV export)
 │   ├── processed/     # clean_loans.parquet, scored_portfolio.parquet
-│   └── curated/       # Star schema: Fact_Loan_Risk_Portfolio + Dim_* tables
+│   └── curated/       # Star schema: Fact_Loan_Risk_Portfolio, Fact_Stress_Test_Scenarios, Dim_*
 ├── src/
 │   ├── data/
 │   │   ├── download.py     # Kaggle -> Parquet ingestion
@@ -62,12 +101,19 @@ training and calibration). The LGD model scores **0.205 RMSE / 0.172 MAE** on re
 │   │   ├── categorical_utils.py   # consistent categorical encoding across train & inference
 │   │   ├── train_pd.py            # calibrated LightGBM PD model, OOT validation
 │   │   ├── train_lgd.py           # LightGBM LGD regression model
-│   │   └── inference.py           # portfolio-wide PD/LGD/EAD/EL scoring
+│   │   ├── inference.py           # portfolio-wide PD/LGD/EAD/EL scoring
+│   │   ├── governance_utils.py    # PSI, KS-statistic, calibration reliability curve
+│   │   ├── evaluate_governance.py # calibration diagnostics + PSI + model_risk_summary.json
+│   │   └── stress_test.py         # Baseline/Adverse/Severely Adverse scenario engine
 │   └── bi/
 │       └── build_marts.py  # star schema generation
 ├── dax/
 │   └── credit_risk_measures.dax  # EAD, Weighted PD, EL, EL Rate %, Risk Migration, Stress Testing
-├── run_pipeline.py    # orchestrates the full ETL -> train -> score -> marts workflow
+├── docs/
+│   └── POWER_BI_SETUP.md   # table relationships + page-by-page dashboard build guide
+├── reports/                 # model_risk_summary.json, psi_report.csv, calibration_curve.png
+├── tests/                    # pytest: ETL contracts, star-schema referential integrity, PSI/KS unit tests
+├── run_pipeline.py    # orchestrates ETL -> train -> score -> marts (+ --test / --stress-test)
 └── DEVELOPMENT.md     # project rules and modeling constraints I set for this build
 ```
 
@@ -78,11 +124,18 @@ training and calibration). The LGD model scores **0.205 RMSE / 0.172 MAE** on re
 2. Run the full pipeline:
 
 ```
-python run_pipeline.py
+python run_pipeline.py                  # ETL -> train PD/LGD -> score -> build marts
+python run_pipeline.py --stress-test    # same, plus Baseline/Adverse/Severely Adverse scenarios
+python run_pipeline.py --test           # run the pytest suite instead of the pipeline
 ```
 
-This runs ETL → PD/LGD training → portfolio scoring → star-schema mart generation, and prints a
-summary of Total EAD, Weighted-Average PD, and Total Expected Loss, broken down by credit grade.
+The default run prints a summary of Total EAD, Weighted-Average PD, and Total Expected Loss,
+broken down by credit grade. Model governance diagnostics are a separate step, since they
+evaluate already-trained models rather than producing pipeline outputs:
+
+```
+python -m src.models.evaluate_governance
+```
 
 ## Design notes
 
@@ -97,3 +150,16 @@ summary of Total EAD, Weighted-Average PD, and Total Expected Loss, broken down 
   utilization-based EAD model).
 - **Dim_Borrower is 1:1 with loans**, not deduplicated — this dataset has no persistent customer
   identifier across loans, so each row represents one borrower snapshot at application time.
+- **PSI baseline = the training/development sample**, not the immediately-preceding vintage —
+  that's what a governance review actually wants to know: has the population drifted since the
+  model was built, not just since last quarter.
+- **No revolving-exposure CCF in practice.** The severely-adverse scenario's credit-conversion-
+  factor shock is implemented as a general `EAD + CCF × undrawn_amount` formula, but this dataset
+  has no undrawn/revolving exposure (installment loans are fully disbursed at origination), so
+  `undrawn_amount` is 0 for every loan and EAD doesn't move under stress here.
+
+See [docs/POWER_BI_SETUP.md](docs/POWER_BI_SETUP.md) for the full dashboard build guide,
+including two things I was upfront about rather than overstating: `Dim_Vintage` only supports
+quarter-level trending (no true calendar date table yet), and "migration" in this dataset means
+vintage-cohort mix shift, not a literal month-by-month delinquency roll-rate matrix (there's no
+loan-performance panel here, just one snapshot per loan).
