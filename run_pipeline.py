@@ -4,6 +4,7 @@ Run with the project's system Python (see DEVELOPMENT.md "Environment Setup" —
     "C:\\Program Files\\Python313\\python.exe" run_pipeline.py                  # full pipeline
     "C:\\Program Files\\Python313\\python.exe" run_pipeline.py --stress-test    # + stress-test scenarios
     "C:\\Program Files\\Python313\\python.exe" run_pipeline.py --test           # run the pytest suite only
+    "C:\\Program Files\\Python313\\python.exe" run_pipeline.py --dashboard      # launch the Streamlit app
 
 Note: this assumes `data/raw/loans_raw.parquet` already exists (run `src/data/download.py`
 once, with Kaggle API credentials configured, to produce it).
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import subprocess
 import sys
 from pathlib import Path
 
@@ -29,6 +31,7 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent
 SCORED_PORTFOLIO_PATH = PROJECT_ROOT / "data" / "processed" / "scored_portfolio.parquet"
 TESTS_DIR = PROJECT_ROOT / "tests"
+DASHBOARD_PATH = PROJECT_ROOT / "app" / "dashboard.py"
 
 
 def print_portfolio_summary(path: Path = SCORED_PORTFOLIO_PATH) -> None:
@@ -83,6 +86,10 @@ def parse_args() -> argparse.Namespace:
         "--stress-test", action="store_true",
         help="Also run macroeconomic stress-test scenarios (Baseline/Adverse/Severely Adverse) after the marts are built",
     )
+    parser.add_argument(
+        "--dashboard", action="store_true",
+        help="Launch the Streamlit dashboard (app/dashboard.py) instead of running the pipeline",
+    )
     return parser.parse_args()
 
 
@@ -93,11 +100,20 @@ def run_test_suite() -> int:
     return pytest.main([str(TESTS_DIR), "-v"])
 
 
+def run_dashboard() -> int:
+    """Launch the Streamlit dashboard. Blocks until the user stops the server (Ctrl+C)."""
+    result = subprocess.run([sys.executable, "-m", "streamlit", "run", str(DASHBOARD_PATH)])
+    return result.returncode
+
+
 def main() -> None:
     args = parse_args()
 
     if args.test:
         sys.exit(run_test_suite())
+
+    if args.dashboard:
+        sys.exit(run_dashboard())
 
     logger.info("STEP 1/4: ETL")
     run_etl()

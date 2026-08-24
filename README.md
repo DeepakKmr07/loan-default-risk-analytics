@@ -29,6 +29,9 @@ library ready for Power BI, with a calibrated machine-learning core in the middl
   (CCAR-style PD/LGD/EAD shocks) exported as its own Parquet fact table for Power BI.
 - **Automated test suite:** pytest coverage for ETL data contracts, star-schema referential
   integrity, and the PSI/KS/calibration statistics themselves.
+- **Interactive Streamlit dashboard:** a self-serve web app (`app/dashboard.py`) reading straight
+  from the curated Parquet marts — executive KPIs, vintage/migration views, and a live macro
+  stress simulator with sliders, alongside the enterprise Power BI layer.
 
 ## Results (full 2007–2018 accepted-loans portfolio)
 
@@ -83,6 +86,7 @@ exposure.
 - **Storage / ETL:** DuckDB, PyArrow
 - **Modeling:** Python, scikit-learn, LightGBM, XGBoost, Optuna
 - **BI:** Star-schema Parquet marts + a full DAX measure library, designed for Power BI
+- **Interactive app:** Streamlit + Plotly, reading the same curated Parquet marts directly
 - **Testing:** pytest
 
 ## Project structure
@@ -92,6 +96,8 @@ exposure.
 │   ├── raw/          # loans_raw.parquet (converted from the LendingClub CSV export)
 │   ├── processed/     # clean_loans.parquet, scored_portfolio.parquet
 │   └── curated/       # Star schema: Fact_Loan_Risk_Portfolio, Fact_Stress_Test_Scenarios, Dim_*
+├── app/
+│   └── dashboard.py   # Streamlit + Plotly interactive dashboard (3 tabs, see below)
 ├── src/
 │   ├── data/
 │   │   ├── download.py     # Kaggle -> Parquet ingestion
@@ -127,6 +133,7 @@ exposure.
 python run_pipeline.py                  # ETL -> train PD/LGD -> score -> build marts
 python run_pipeline.py --stress-test    # same, plus Baseline/Adverse/Severely Adverse scenarios
 python run_pipeline.py --test           # run the pytest suite instead of the pipeline
+python run_pipeline.py --dashboard       # launch the Streamlit app (needs the marts built already)
 ```
 
 The default run prints a summary of Total EAD, Weighted-Average PD, and Total Expected Loss,
@@ -136,6 +143,24 @@ evaluate already-trained models rather than producing pipeline outputs:
 ```
 python -m src.models.evaluate_governance
 ```
+
+### The dashboard
+
+`app/dashboard.py` reads `Fact_Loan_Risk_Portfolio.parquet` and `Fact_Stress_Test_Scenarios.parquet`
+straight off disk via DuckDB (no separate data step) and gives three views, filterable by credit
+sub-grade and vintage quarter from the sidebar:
+
+1. **Executive Portfolio Health** — Total EAD / Weighted PD / Expected Loss / EL Rate KPI cards,
+   an EL-by-grade bar chart, and an interest-rate-vs-PD scatter (sampled to 5,000 loans for
+   responsiveness — the full 2.26M-row plot isn't something a browser should render live).
+2. **Vintage Analysis & Migration** — a cumulative-default-rate-by-vintage line chart and a
+   loan-status-mix-by-grade heatmap. Both are captioned in-app with what they actually represent:
+   this dataset is a loan-level snapshot, not a monthly performance panel, so there's no literal
+   delinquency roll-rate history to show — see the Design notes below.
+3. **Dynamic Macro Stress Simulator** — live sliders for a PD multiplier (1.0×–2.5×) and an
+   LGD/collateral haircut (0%–50%) recompute Expected Loss on the fly against the currently
+   filtered population, with a before/after capital-impact delta, plus a reference table pulling
+   in the three pre-computed CCAR-style scenarios for comparison.
 
 ## Design notes
 
