@@ -1,0 +1,37 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          pip install duckdb pandas numpy scikit-learn lightgbm xgboost optuna scipy pyarrow pytest
+
+      # test_etl.py and test_star_schema.py skip if their data files don't exist (the real
+      # ~2.26M-row dataset isn't committed to the repo). Generating a small synthetic dataset
+      # and running the real pipeline against it here means those tests actually execute in CI
+      # against real pipeline output, instead of silently skipping.
+      - name: Generate synthetic dataset and run the pipeline
+        run: |
+          python tests/fixtures/make_synthetic_raw.py
+          python -m src.data.etl_duckdb
+          python -m src.models.train_pd
+          python -m src.models.train_lgd
+          python -m src.models.inference
+          python -m src.bi.build_marts
+
+      - name: Run test suite
+        run: pytest tests/ -v

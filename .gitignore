@@ -13,4 +13,5 @@ data/curated/*
 !data/curated/.gitkeep
 data/*.csv
 data/*.csv/
-/models/
+/models/*
+!/models/*.json

@@ -13,9 +13,13 @@ library ready for Power BI, with a calibrated machine-learning core in the middl
   utilization features directly with vectorized SQL on Parquet — no full in-memory pandas loads.
 - **PD model:** a LightGBM classifier predicting Probability of Default, validated with a strict
   Out-of-Time (OOT) split (never randomly shuffled across vintages) and calibrated with isotonic
-  regression so predicted risk matches empirical default rates.
+  regression so predicted risk matches empirical default rates. Hyperparameters are tunable via
+  Optuna (`--tune`), with the best-found configuration persisted and reused automatically.
 - **LGD model:** a LightGBM regressor trained on realized recoveries from resolved, charged-off
-  loans to estimate Loss Given Default.
+  loans to estimate Loss Given Default, tunable the same way.
+- **Explainability:** per-loan SHAP reason codes on the PD model (`src/models/explain.py`) —
+  the top risk-driving features per loan, in the direction adverse-action-style credit
+  explanations need.
 - **Portfolio scoring:** every loan in the portfolio (including still-active accounts) is scored
   with PD, LGD, EAD, and Expected Loss.
 - **Star schema marts:** a curated `Fact_Loan_Risk_Portfolio` table plus `Dim_Borrower`,
@@ -27,8 +31,10 @@ library ready for Power BI, with a calibrated machine-learning core in the middl
   features across origination vintages — the diagnostics Basel/IFRS 9 model-risk review expects.
 - **Macroeconomic stress testing:** Baseline / Adverse / Severely Adverse scenario simulation
   (CCAR-style PD/LGD/EAD shocks) exported as its own Parquet fact table for Power BI.
-- **Automated test suite:** pytest coverage for ETL data contracts, star-schema referential
-  integrity, and the PSI/KS/calibration statistics themselves.
+- **Automated test suite + CI:** pytest coverage for ETL data contracts, star-schema referential
+  integrity, and the PSI/KS/calibration statistics themselves, run automatically on every push
+  via GitHub Actions against a synthetic dataset (so `test_etl.py`/`test_star_schema.py` actually
+  execute in CI instead of skipping for lack of the real, uncommitted multi-GB data).
 - **Interactive Streamlit dashboard:** a self-serve web app (`app/dashboard.py`) reading straight
   from the curated Parquet marts — executive KPIs, vintage/migration views, and a live macro
   stress simulator with sliders, alongside the enterprise Power BI layer.
@@ -37,28 +43,45 @@ library ready for Power BI, with a calibrated machine-learning core in the middl
 
 | Grade | Total EAD | Weighted PD | Expected Loss |
 |---|---:|---:|---:|
-| A | $6.32B | 7.37% | $234.7M |
-| B | $9.40B | 18.14% | $964.1M |
-| C | $9.77B | 28.75% | $1.73B |
-| D | $5.10B | 37.21% | $1.25B |
-| E | $2.37B | 45.41% | $759.8M |
-| F | $0.80B | 54.00% | $321.2M |
-| G | $0.25B | 57.00% | $108.3M |
-| **Total** | **$34.0B** | **25.07%** | **$5.36B** |
+| A | $6.32B | 7.20% | $229.3M |
+| B | $9.40B | 17.92% | $953.8M |
+| C | $9.77B | 28.90% | $1.73B |
+| D | $5.10B | 37.52% | $1.26B |
+| E | $2.37B | 46.03% | $770.0M |
+| F | $0.80B | 53.87% | $320.3M |
+| G | $0.25B | 56.89% | $108.1M |
+| **Total** | **$34.0B** | **25.11%** | **$5.38B** |
 
-Overall portfolio EL rate: **15.77%**. The PD model scores **0.713 ROC-AUC / 0.389 PR-AUC / 0.1545
+Overall portfolio EL rate: **15.81%**. The PD model scores **0.713 ROC-AUC / 0.390 PR-AUC / 0.1544
 Brier score** on the out-of-time test set (loans issued Oct 2016–Dec 2018, held out entirely from
-training and calibration). The LGD model scores **0.205 RMSE / 0.172 MAE** on realized recoveries.
+training and calibration). The LGD model scores **0.205 RMSE / 0.173 MAE** on realized recoveries.
+
+## Hyperparameter tuning (`--tune`, via Optuna)
+
+Tuning is opt-in and the result is genuinely mixed — worth stating plainly rather than only
+reporting the win:
+
+- **PD:** a 25-trial search found a configuration that generalizes marginally better on the true
+  OOT test set (ROC-AUC 0.7131→0.7134, Brier 0.1545→0.1544). Small, but real — kept and persisted
+  to `models/pd_best_params.json`.
+- **LGD:** a 25-trial search found a configuration with a *better* internal tuning-validation
+  score, but it scored *worse* on the true OOT test (RMSE 0.2046→0.2061) — the search overfit its
+  own validation slice. I reverted to the original hand-picked hyperparameters rather than ship a
+  model that looked better in tuning and measurably wasn't. No `models/lgd_best_params.json` is
+  committed, on purpose — its absence is the record of that decision, not an oversight.
+
+This is the actual value of wiring up a real tuning loop instead of just listing Optuna in a tech
+stack: it only helps if you check the *right* metric before trusting it.
 
 ## Model governance & stability (`reports/model_risk_summary.json`)
 
 | Metric | Value |
 |---|---:|
-| Gini coefficient (2×AUC−1) | 0.4262 |
-| KS statistic | 0.3097 |
-| ROC-AUC (OOT) | 0.7131 |
-| Brier score (OOT) | 0.1545 |
-| LGD RMSE / MAE (OOT) | 0.2046 / 0.1724 |
+| Gini coefficient (2×AUC−1) | 0.4267 |
+| KS statistic | 0.3109 |
+| ROC-AUC (OOT) | 0.7133 |
+| Brier score (OOT) | 0.1544 |
+| LGD RMSE / MAE (OOT) | 0.2048 / 0.1725 |
 
 The calibration reliability diagram (`reports/calibration_curve.png`) tracks the perfect-
 calibration diagonal closely across all 10 deciles. PSI monitoring (`reports/psi_report.csv`,
@@ -68,13 +91,21 @@ pricing shifted over time) and `revol_util`/`credit_utilization` (significant dr
 onward — a known reporting change in LendingClub's later vintages). This is exactly the kind of
 real, explainable population drift a PSI monitor is supposed to catch.
 
+## Explainability (`reports/loan_reason_codes.parquet`)
+
+SHAP reason codes over a 2,000-loan sample: `sub_grade` is the #1 risk driver for about half the
+sample (unsurprising — it's LendingClub's own risk assessment baked into the loan terms),
+followed by `term_months` (60-month loans carry more risk than 36-month) and
+`acc_open_past_24mths` (recent credit-seeking behavior) — all textbook credit-risk signals, which
+is the actual point of checking this rather than assuming a tree model's internals are sane.
+
 ## Stress testing (`data/curated/Fact_Stress_Test_Scenarios.parquet`)
 
 | Scenario | Shock | Weighted PD | Total Expected Loss |
 |---|---|---:|---:|
-| Baseline | none | 25.07% | $5.36B |
-| Adverse | PD ×1.25, LGD ×1.15 | 31.33% | $7.71B |
-| Severely Adverse | PD ×1.60, LGD ×1.25, +20% CCF on undrawn exposure | 40.01% | $10.68B |
+| Baseline | none | 25.11% | $5.38B |
+| Adverse | PD ×1.25, LGD ×1.15 | 31.38% | $7.73B |
+| Severely Adverse | PD ×1.60, LGD ×1.25, +20% CCF on undrawn exposure | 40.05% | $10.71B |
 
 EAD is unchanged across scenarios: LendingClub loans are fully-disbursed installment loans with
 no revolving/undrawn commitment, so the CCF term has no effect on this particular portfolio — the
@@ -84,10 +115,10 @@ exposure.
 ## Tech stack
 
 - **Storage / ETL:** DuckDB, PyArrow
-- **Modeling:** Python, scikit-learn, LightGBM, XGBoost, Optuna
+- **Modeling:** Python, scikit-learn, LightGBM, XGBoost, Optuna (hyperparameter tuning), SHAP (explainability)
 - **BI:** Star-schema Parquet marts + a full DAX measure library, designed for Power BI
 - **Interactive app:** Streamlit + Plotly, reading the same curated Parquet marts directly
-- **Testing:** pytest
+- **Testing / CI:** pytest, GitHub Actions
 
 ## Project structure
 
@@ -110,16 +141,21 @@ exposure.
 │   │   ├── inference.py           # portfolio-wide PD/LGD/EAD/EL scoring
 │   │   ├── governance_utils.py    # PSI, KS-statistic, calibration reliability curve
 │   │   ├── evaluate_governance.py # calibration diagnostics + PSI + model_risk_summary.json
-│   │   └── stress_test.py         # Baseline/Adverse/Severely Adverse scenario engine
+│   │   ├── stress_test.py         # Baseline/Adverse/Severely Adverse scenario engine
+│   │   ├── tuning.py              # Optuna search for both models (opt-in via --tune)
+│   │   └── explain.py             # SHAP per-loan reason codes for the PD model
 │   └── bi/
 │       └── build_marts.py  # star schema generation
 ├── dax/
 │   └── credit_risk_measures.dax  # EAD, Weighted PD, EL, EL Rate %, Risk Migration, Stress Testing
 ├── docs/
 │   └── POWER_BI_SETUP.md   # table relationships + page-by-page dashboard build guide
-├── reports/                 # model_risk_summary.json, psi_report.csv, calibration_curve.png
-├── tests/                    # pytest: ETL contracts, star-schema referential integrity, PSI/KS unit tests
-├── run_pipeline.py    # orchestrates ETL -> train -> score -> marts (+ --test / --stress-test)
+├── reports/                 # model_risk_summary.json, psi_report.csv, calibration_curve.png, loan_reason_codes.parquet
+├── tests/
+│   ├── fixtures/make_synthetic_raw.py  # synthetic dataset generator, used locally and in CI
+│   └── test_*.py             # ETL contracts, star-schema referential integrity, PSI/KS unit tests
+├── .github/workflows/tests.yml  # CI: generates synthetic data, runs the pipeline, runs pytest
+├── run_pipeline.py    # orchestrates ETL -> train -> score -> marts (+ --test / --stress-test / --dashboard)
 └── DEVELOPMENT.md     # project rules and modeling constraints I set for this build
 ```
 
@@ -142,6 +178,28 @@ evaluate already-trained models rather than producing pipeline outputs:
 
 ```
 python -m src.models.evaluate_governance
+```
+
+### Tuning and explainability
+
+Hyperparameter tuning is opt-in, not part of the default pipeline run — a full Optuna search
+takes minutes, and the default run should stay fast and reproducible:
+
+```
+python -m src.models.train_pd --tune --n-trials 25   # tunes, saves models/pd_best_params.json
+python -m src.models.train_lgd --tune --n-trials 25  # tunes, saves models/lgd_best_params.json
+```
+
+Once a `*_best_params.json` exists, every subsequent normal run (`train_pd.main()` /
+`train_lgd.main()` / `run_pipeline.py`) automatically picks it up and trains with those
+hyperparameters instead of the fixed defaults — no flag needed. Re-run with `--tune` any time
+to re-search (e.g. after the underlying data changes materially).
+
+Per-loan reason codes (SHAP, on a representative sample rather than the full portfolio — see
+the module docstring for why) are computed separately from training:
+
+```
+python -m src.models.explain
 ```
 
 ### The dashboard

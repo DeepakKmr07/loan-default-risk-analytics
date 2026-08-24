@@ -1,16 +1,16 @@
 metric,vintage,n,psi,flag
-predicted_pd,2016Q1,77516,0.0107,stable
+predicted_pd,2016Q1,77516,0.0125,stable
 predicted_pd,2016Q2,62949,0.0062,stable
-predicted_pd,2016Q3,60891,0.0234,stable
-predicted_pd,2016Q4,57331,0.017,stable
-predicted_pd,2017Q1,46874,0.0118,stable
-predicted_pd,2017Q2,44492,0.0082,stable
-predicted_pd,2017Q3,43854,0.0049,stable
-predicted_pd,2017Q4,34101,0.0074,stable
-predicted_pd,2018Q1,22530,0.0248,stable
-predicted_pd,2018Q2,18449,0.0228,stable
-predicted_pd,2018Q3,10309,0.0386,stable
-predicted_pd,2018Q4,5030,0.062,stable
+predicted_pd,2016Q3,60891,0.0237,stable
+predicted_pd,2016Q4,57331,0.0167,stable
+predicted_pd,2017Q1,46874,0.0102,stable
+predicted_pd,2017Q2,44492,0.0077,stable
+predicted_pd,2017Q3,43854,0.0056,stable
+predicted_pd,2017Q4,34101,0.0055,stable
+predicted_pd,2018Q1,22530,0.023,stable
+predicted_pd,2018Q2,18449,0.0212,stable
+predicted_pd,2018Q3,10309,0.0306,stable
+predicted_pd,2018Q4,5030,0.0482,stable
 int_rate,2016Q1,77516,0.1562,moderate shift
 int_rate,2016Q2,62949,0.122,moderate shift
 int_rate,2016Q3,60891,0.1897,moderate shift

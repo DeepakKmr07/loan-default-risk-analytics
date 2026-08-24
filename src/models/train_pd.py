@@ -21,6 +21,7 @@ from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_s
 
 from src.models.categorical_utils import apply_categorical_dtypes, build_categorical_dtypes
 from src.models.features import CATEGORICAL_FEATURES, PD_FEATURES
+from src.models.tuning import load_best_params, save_best_params, tune_classifier
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
@@ -30,10 +31,19 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CLEAN_PARQUET = PROJECT_ROOT / "data" / "processed" / "clean_loans.parquet"
 MODEL_DIR = PROJECT_ROOT / "models"
 PD_MODEL_PATH = MODEL_DIR / "pd_model.pkl"
+PD_BEST_PARAMS_PATH = MODEL_DIR / "pd_best_params.json"
 
 TARGET = "default_flag"
 OOT_TEST_FRACTION = 0.2
 CALIBRATION_FRACTION = 0.2  # carved from the most recent slice of the remaining training period
+
+DEFAULT_PD_PARAMS: dict = {
+    "n_estimators": 500,
+    "learning_rate": 0.05,
+    "num_leaves": 63,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+}
 
 
 def load_labeled_data(path: Path = CLEAN_PARQUET) -> pd.DataFrame:
@@ -73,17 +83,10 @@ def time_based_split(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.D
     return train, calib, test_oot
 
 
-def train_lightgbm(train: pd.DataFrame) -> lgb.LGBMClassifier:
-    """Fit a LightGBM classifier on the training slice."""
-    model = lgb.LGBMClassifier(
-        objective="binary",
-        n_estimators=500,
-        learning_rate=0.05,
-        num_leaves=63,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        random_state=RANDOM_STATE,
-    )
+def train_lightgbm(train: pd.DataFrame, params: dict | None = None) -> lgb.LGBMClassifier:
+    """Fit a LightGBM classifier on the training slice, using tuned params if provided."""
+    model_params = {**DEFAULT_PD_PARAMS, **(params or {})}
+    model = lgb.LGBMClassifier(objective="binary", random_state=RANDOM_STATE, **model_params)
     model.fit(train[PD_FEATURES], train[TARGET], categorical_feature=CATEGORICAL_FEATURES)
     return model
 
@@ -110,11 +113,21 @@ def evaluate(model, test: pd.DataFrame, label: str) -> dict[str, float]:
     return metrics
 
 
-def main() -> None:
+def main(tune: bool = False, n_trials: int = 25) -> None:
     df = load_labeled_data()
     train, calib, test_oot = time_based_split(df)
 
-    raw_model = train_lightgbm(train)
+    if tune:
+        logger.info("Tuning PD hyperparameters with Optuna (%s trials)...", n_trials)
+        best_params = tune_classifier(train, PD_FEATURES, CATEGORICAL_FEATURES, TARGET, n_trials=n_trials)
+        save_best_params(best_params, PD_BEST_PARAMS_PATH)
+        logger.info("Saved tuned hyperparameters to %s", PD_BEST_PARAMS_PATH)
+    else:
+        best_params = load_best_params(PD_BEST_PARAMS_PATH)
+        if best_params:
+            logger.info("Using previously tuned hyperparameters from %s", PD_BEST_PARAMS_PATH)
+
+    raw_model = train_lightgbm(train, best_params)
     evaluate(raw_model, test_oot, "uncalibrated")
 
     calibrated_model = calibrate_model(raw_model, calib)
@@ -126,4 +139,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Train the calibrated PD model")
+    parser.add_argument("--tune", action="store_true", help="Run Optuna hyperparameter search before training")
+    parser.add_argument("--n-trials", type=int, default=25, help="Number of Optuna trials when --tune is set")
+    args = parser.parse_args()
+    main(tune=args.tune, n_trials=args.n_trials)
