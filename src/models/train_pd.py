@@ -1,8 +1,8 @@
 """Train a calibrated LightGBM Probability of Default (PD) model with Out-of-Time validation.
 
-Splitting is strictly chronological (CLAUDE.md rule #1: never random-shuffle across time):
+Splitting is strictly chronological (DEVELOPMENT.md rule #1: never random-shuffle across time):
 train < calibration < out-of-time (OOT) test, in issue-date order throughout. Predicted
-probabilities are calibrated with isotonic regression (CLAUDE.md rule #3) so risk estimates
+probabilities are calibrated with isotonic regression (DEVELOPMENT.md rule #3) so risk estimates
 track empirical default rates.
 """
 

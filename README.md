@@ -68,7 +68,7 @@ training and calibration). The LGD model scores **0.205 RMSE / 0.172 MAE** on re
 ├── dax/
 │   └── credit_risk_measures.dax  # EAD, Weighted PD, EL, EL Rate %, Risk Migration, Stress Testing
 ├── run_pipeline.py    # orchestrates the full ETL -> train -> score -> marts workflow
-└── CLAUDE.md          # project rules and modeling constraints I set for this build
+└── DEVELOPMENT.md     # project rules and modeling constraints I set for this build
 ```
 
 ## Running it

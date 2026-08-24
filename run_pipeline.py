@@ -1,6 +1,6 @@
 """Master orchestration script: ETL -> Train PD/LGD -> Inference -> Curated Star Schema.
 
-Run with the project's system Python (see CLAUDE.md "Environment Setup" — no venv/conda here):
+Run with the project's system Python (see DEVELOPMENT.md "Environment Setup" — no venv/conda here):
     "C:\\Program Files\\Python313\\python.exe" run_pipeline.py
 
 Note: this assumes `data/raw/loans_raw.parquet` already exists (run `src/data/download.py`
