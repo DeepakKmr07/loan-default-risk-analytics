@@ -1,0 +1,18 @@
+{
+  "n_folds": 5,
+  "pd_model": {
+    "roc_auc_mean": 0.7287,
+    "roc_auc_std": 0.015,
+    "brier_score_mean": 0.1472,
+    "brier_score_std": 0.0122
+  },
+  "lgd_model": {
+    "rmse_mean": 0.1965,
+    "rmse_std": 0.0107
+  },
+  "artifacts": {
+    "pd_csv": "reports/rolling_backtest_pd.csv",
+    "lgd_csv": "reports/rolling_backtest_lgd.csv",
+    "pd_plot": "reports/rolling_backtest_pd.png"
+  }
+}

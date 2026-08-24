@@ -32,6 +32,7 @@ jobs:
           python -m src.models.train_lgd
           python -m src.models.inference
           python -m src.bi.build_marts
+          python -m src.models.rolling_backtest --folds 3
 
       - name: Run test suite
         run: pytest tests/ -v

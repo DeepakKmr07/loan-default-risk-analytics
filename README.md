@@ -15,6 +15,9 @@ library ready for Power BI, with a calibrated machine-learning core in the middl
   Out-of-Time (OOT) split (never randomly shuffled across vintages) and calibrated with isotonic
   regression so predicted risk matches empirical default rates. Hyperparameters are tunable via
   Optuna (`--tune`), with the best-found configuration persisted and reused automatically.
+- **Rolling-window backtesting** (`src/models/rolling_backtest.py`): a single OOT cutoff only
+  proves a model worked on one held-out period. This walks the whole timeline forward across
+  multiple expanding train/test windows to check whether performance actually holds up over time.
 - **LGD model:** a LightGBM regressor trained on realized recoveries from resolved, charged-off
   loans to estimate Loss Given Default, tunable the same way.
 - **Explainability:** per-loan SHAP reason codes on the PD model (`src/models/explain.py`) —
@@ -32,9 +35,10 @@ library ready for Power BI, with a calibrated machine-learning core in the middl
 - **Macroeconomic stress testing:** Baseline / Adverse / Severely Adverse scenario simulation
   (CCAR-style PD/LGD/EAD shocks) exported as its own Parquet fact table for Power BI.
 - **Automated test suite + CI:** pytest coverage for ETL data contracts, star-schema referential
-  integrity, and the PSI/KS/calibration statistics themselves, run automatically on every push
-  via GitHub Actions against a synthetic dataset (so `test_etl.py`/`test_star_schema.py` actually
-  execute in CI instead of skipping for lack of the real, uncommitted multi-GB data).
+  integrity, the PSI/KS/calibration statistics, and the walk-forward backtest splitter itself,
+  run automatically on every push via GitHub Actions against a synthetic dataset (so
+  `test_etl.py`/`test_star_schema.py` actually execute in CI instead of skipping for lack of the
+  real, uncommitted multi-GB data, and the rolling backtest runs end-to-end too).
 - **Interactive Streamlit dashboard:** a self-serve web app (`app/dashboard.py`) reading straight
   from the curated Parquet marts — executive KPIs, vintage/migration views, and a live macro
   stress simulator with sliders, alongside the enterprise Power BI layer.
@@ -72,6 +76,33 @@ reporting the win:
 
 This is the actual value of wiring up a real tuning loop instead of just listing Optuna in a tech
 stack: it only helps if you check the *right* metric before trusting it.
+
+## Rolling-window out-of-time validation (`reports/rolling_backtest_summary.json`)
+
+The headline numbers above come from one OOT cutoff (train through mid-2016, test on loans
+issued Oct 2016–Dec 2018). That's the standard split for the deployed model, but it only answers
+"did this work on one held-out period" — a credit-risk reviewer's sharper question is whether it
+holds up *consistently* across time. `rolling_backtest.py` answers that with a walk-forward
+design: the timeline is cut into 6 equal chronological segments, and each of 5 folds trains on
+all segments before it and tests on the next one — an expanding window that never touches future
+data, with hyperparameters held fixed so this measures stability of one modeling choice, not the
+effect of re-tuning per fold.
+
+| Fold | Test window | ROC-AUC | Brier | LGD RMSE |
+|---|---|---:|---:|---:|
+| 1 | 2013-12 – 2014-12 | 0.7159 | 0.1371 | 0.2030 |
+| 2 | 2014-12 – 2015-08 | 0.7383 | 0.1426 | 0.1980 |
+| 3 | 2015-08 – 2016-03 | 0.7501 | 0.1389 | 0.1961 |
+| 4 | 2016-03 – 2017-01 | 0.7161 | 0.1672 | 0.1788 |
+| 5 | 2017-01 – 2018-12 | 0.7231 | 0.1500 | 0.2064 |
+
+PD ROC-AUC holds in a **0.716–0.750 band (mean 0.729, std 0.015)** across five different
+out-of-time windows spanning 2013–2018 — the single-cutoff number isn't a lucky draw. Fold 4
+(2016-03–2017-01) is the one soft spot, with Brier score jumping to 0.167: this lines up with the
+same `int_rate`/`revol_util` drift the PSI monitor below independently flags starting in that
+period, which is a good cross-check that both diagnostics are catching the same real phenomenon
+rather than noise. See `reports/rolling_backtest_pd.png` for the fold-by-fold plot and
+`reports/rolling_backtest_pd.csv` / `rolling_backtest_lgd.csv` for the full per-fold breakdown.
 
 ## Model governance & stability (`reports/model_risk_summary.json`)
 
@@ -143,14 +174,16 @@ exposure.
 │   │   ├── evaluate_governance.py # calibration diagnostics + PSI + model_risk_summary.json
 │   │   ├── stress_test.py         # Baseline/Adverse/Severely Adverse scenario engine
 │   │   ├── tuning.py              # Optuna search for both models (opt-in via --tune)
-│   │   └── explain.py             # SHAP per-loan reason codes for the PD model
+│   │   ├── explain.py             # SHAP per-loan reason codes for the PD model
+│   │   └── rolling_backtest.py    # walk-forward multi-window OOT stability backtest
 │   └── bi/
 │       └── build_marts.py  # star schema generation
 ├── dax/
 │   └── credit_risk_measures.dax  # EAD, Weighted PD, EL, EL Rate %, Risk Migration, Stress Testing
 ├── docs/
 │   └── POWER_BI_SETUP.md   # table relationships + page-by-page dashboard build guide
-├── reports/                 # model_risk_summary.json, psi_report.csv, calibration_curve.png, loan_reason_codes.parquet
+├── reports/                 # model_risk_summary.json, psi_report.csv, calibration_curve.png, loan_reason_codes.parquet,
+│                             # rolling_backtest_summary.json, rolling_backtest_pd.csv/.png, rolling_backtest_lgd.csv
 ├── tests/
 │   ├── fixtures/make_synthetic_raw.py  # synthetic dataset generator, used locally and in CI
 │   └── test_*.py             # ETL contracts, star-schema referential integrity, PSI/KS unit tests
@@ -200,6 +233,13 @@ the module docstring for why) are computed separately from training:
 
 ```
 python -m src.models.explain
+```
+
+The rolling-window backtest is also a separate step — it retrains fresh models per fold, so it's
+not part of the default fast pipeline run either:
+
+```
+python -m src.models.rolling_backtest --folds 5   # 5 is the default; adjust for smaller datasets
 ```
 
 ### The dashboard
