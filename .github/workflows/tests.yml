@@ -18,7 +18,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install duckdb pandas numpy scikit-learn lightgbm xgboost optuna scipy pyarrow pytest
+          pip install duckdb pandas numpy scikit-learn lightgbm xgboost optuna scipy pyarrow pytest matplotlib
 
       # test_etl.py and test_star_schema.py skip if their data files don't exist (the real
       # ~2.26M-row dataset isn't committed to the repo). Generating a small synthetic dataset
