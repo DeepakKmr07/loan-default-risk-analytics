@@ -1,0 +1,127 @@
+// =============================================================================================
+// Credit Risk Intelligence — DAX Measure Library
+//
+// Model:
+//   Fact_Loan_Risk_Portfolio  (grain: one row per loan)
+//     -> Dim_Borrower        (borrower_key, 1:1 with loan — LendingClub has no repeat-customer id)
+//     -> Dim_Vintage         (vintage_key, ordered by issue_year/issue_quarter)
+//     -> Dim_Credit_Grade    (credit_grade_key)
+//
+// Fact columns used below: pd, lgd, ead, expected_loss, default_flag, actual_lgd, funded_amnt.
+// =============================================================================================
+
+// ----------------------------------- Core Exposure ------------------------------------------
+
+Total EAD =
+SUM ( Fact_Loan_Risk_Portfolio[ead] )
+
+Total Funded Amount =
+SUM ( Fact_Loan_Risk_Portfolio[funded_amnt] )
+
+Loan Count =
+COUNTROWS ( Fact_Loan_Risk_Portfolio )
+
+// ----------------------------------- PD / LGD ------------------------------------------------
+
+// EAD-weighted average PD — the correct portfolio-level PD, not a simple row average,
+// since larger exposures should count more toward portfolio risk.
+Weighted PD =
+DIVIDE (
+    SUMX ( Fact_Loan_Risk_Portfolio, Fact_Loan_Risk_Portfolio[pd] * Fact_Loan_Risk_Portfolio[ead] ),
+    [Total EAD]
+)
+
+Weighted LGD =
+DIVIDE (
+    SUMX ( Fact_Loan_Risk_Portfolio, Fact_Loan_Risk_Portfolio[lgd] * Fact_Loan_Risk_Portfolio[ead] ),
+    [Total EAD]
+)
+
+Average PD (Simple) =
+AVERAGE ( Fact_Loan_Risk_Portfolio[pd] )
+
+// ----------------------------------- Expected Loss --------------------------------------------
+
+// EL = PD x LGD x EAD, aggregated at loan grain (IFRS 9 / Basel expected-loss formula).
+Total Expected Loss =
+SUMX (
+    Fact_Loan_Risk_Portfolio,
+    Fact_Loan_Risk_Portfolio[pd] * Fact_Loan_Risk_Portfolio[lgd] * Fact_Loan_Risk_Portfolio[ead]
+)
+
+EL Rate % =
+DIVIDE ( [Total Expected Loss], [Total EAD] )
+
+// ----------------------------------- Realized vs Expected (model validation) -------------------
+
+// Only meaningful over resolved loans (default_flag IS NOT NULL); active loans are excluded.
+Realized Default Rate =
+DIVIDE (
+    CALCULATE ( [Loan Count], Fact_Loan_Risk_Portfolio[default_flag] = 1 ),
+    CALCULATE ( [Loan Count], NOT ISBLANK ( Fact_Loan_Risk_Portfolio[default_flag] ) )
+)
+
+Realized Loss Amount =
+SUMX (
+    FILTER ( Fact_Loan_Risk_Portfolio, Fact_Loan_Risk_Portfolio[default_flag] = 1 ),
+    Fact_Loan_Risk_Portfolio[actual_lgd] * Fact_Loan_Risk_Portfolio[ead]
+)
+
+// Calibration check: predicted portfolio PD vs. observed default rate on resolved loans.
+// Should track close to zero for a well-calibrated model within a rating bucket.
+PD Calibration Gap =
+[Weighted PD] - [Realized Default Rate]
+
+// ----------------------------------- Risk Migration --------------------------------------------
+// Dim_Vintage is the time axis (ordinal, by issue_year/issue_quarter). These measures compare
+// the current filter context (e.g. a vintage + grade slice) against the immediately preceding
+// vintage, to surface cohort-over-cohort shifts in risk mix and portfolio quality.
+
+Prior Vintage Weighted PD =
+CALCULATE (
+    [Weighted PD],
+    FILTER ( ALL ( Dim_Vintage ), Dim_Vintage[vintage_key] = MAX ( Dim_Vintage[vintage_key] ) - 1 )
+)
+
+Risk Migration (PD Delta) =
+[Weighted PD] - [Prior Vintage Weighted PD]
+
+Risk Migration (PD Delta) % =
+DIVIDE ( [Risk Migration (PD Delta)], [Prior Vintage Weighted PD] )
+
+// Share of loan count belonging to the currently-filtered credit grade, within its vintage.
+// Slice by Dim_Credit_Grade[grade] and Dim_Vintage to see grade-mix shift over time.
+Grade Mix % =
+DIVIDE ( [Loan Count], CALCULATE ( [Loan Count], ALL ( Dim_Credit_Grade ) ) )
+
+Grade Mix % (Prior Vintage) =
+CALCULATE (
+    [Grade Mix %],
+    FILTER ( ALL ( Dim_Vintage ), Dim_Vintage[vintage_key] = MAX ( Dim_Vintage[vintage_key] ) - 1 )
+)
+
+// Percentage-point shift in a grade's share of originations, vintage over vintage.
+// Positive = credit box loosening toward this grade; negative = tightening away from it.
+Grade Mix Shift (pp) =
+( [Grade Mix %] - [Grade Mix % (Prior Vintage)] ) * 100
+
+// ----------------------------------- Stress Testing ---------------------------------------------
+// Requires two Power BI "What-if" parameter tables (Modeling > New parameter > Numeric range):
+//   'PD Stress Multiplier'  1.0 to 3.0, step 0.1, default 1.0
+//   'LGD Stress Multiplier' 1.0 to 2.0, step 0.1, default 1.0
+// Each generates a single-column disconnected table plus a [<Name> Value] measure, used below
+// via SELECTEDVALUE so the report can drive scenarios from a slicer.
+
+Stressed Expected Loss =
+SUMX (
+    Fact_Loan_Risk_Portfolio,
+    MIN ( Fact_Loan_Risk_Portfolio[pd] * SELECTEDVALUE ( 'PD Stress Multiplier'[PD Stress Multiplier Value], 1.0 ), 1.0 )
+        * MIN ( Fact_Loan_Risk_Portfolio[lgd] * SELECTEDVALUE ( 'LGD Stress Multiplier'[LGD Stress Multiplier Value], 1.0 ), 1.0 )
+        * Fact_Loan_Risk_Portfolio[ead]
+)
+
+Stress EL Delta =
+[Stressed Expected Loss] - [Total Expected Loss]
+
+Stress EL Rate % =
+DIVIDE ( [Stressed Expected Loss], [Total EAD] )
