@@ -77,7 +77,20 @@ against that — the current schema only supports QoQ out of the box.
 | EL Rate (%) | Card | `[EL Rate %]` |
 | EAD & EL trend | Line/clustered column combo | Axis: `Dim_Vintage[vintage]` (sorted by `vintage_key`); Values: `[Total EAD]` (columns), `[Total Expected Loss]` (line, secondary axis) |
 | QoQ EL change | Line chart | Axis: `Dim_Vintage[vintage]`; Values: a QoQ delta measure — `EL QoQ Delta = [Total Expected Loss] - CALCULATE([Total Expected Loss], FILTER(ALL(Dim_Vintage), Dim_Vintage[vintage_key] = MAX(Dim_Vintage[vintage_key]) - 1))` |
+| Expected Loss by Grade | Bar chart | Axis: `Dim_Credit_Grade[grade]`; Values: `[Total Expected Loss]` |
+| Interest Rate vs PD | Scatter chart | see note below |
 | Grade breakdown | Table/matrix | Rows: `Dim_Credit_Grade[grade]`; Values: `[Total EAD]`, `[Weighted PD]`, `[Total Expected Loss]`, `[EL Rate %]` |
+
+**Scatter chart note:** a scatter needs one point per *something* — plotting `[Weighted PD]`
+(a portfolio-level aggregate) with no other dimension collapses to a single dot, not a scatter.
+Two ways to do it properly:
+- **One point per sub-grade** (recommended, ~35 points, readable): X = average `int_rate` by
+  `Dim_Credit_Grade[sub_grade]`, Y = `[Weighted PD]`, both aggregated with `Dim_Credit_Grade[sub_grade]`
+  in the visual's Details field — this is the grade-level risk-pricing curve.
+- **One point per loan** (matches the Streamlit app's version, but 2.26M points will choke the
+  visual): use `Fact_Loan_Risk_Portfolio[int_rate]` and `Fact_Loan_Risk_Portfolio[pd]` directly
+  (not the `[Weighted PD]` measure) with **Sampling** enabled (Format visual > General > a top-N
+  or fixed sample), or pre-aggregate a sampled table in Power Query first.
 
 Add slicers for `Dim_Vintage[vintage]` and `Dim_Credit_Grade[grade]` so the whole page can be
 filtered to a specific cohort.
@@ -95,6 +108,7 @@ the page around that, not a literal delinquency transition matrix.
 | Visual | Type | Fields |
 |---|---|---|
 | Grade mix shift heatmap | Matrix (conditional formatting) | Rows: `Dim_Vintage[vintage]`; Columns: `Dim_Credit_Grade[sub_grade]`; Values: `[Grade Mix Shift (pp)]`, color scale red (loosening toward that grade) to blue (tightening away) |
+| Sub-Grade vs Loan Status | Matrix (conditional formatting) | Rows: `Dim_Credit_Grade[sub_grade]`; Columns: `Fact_Loan_Risk_Portfolio[loan_status]`; Values: `[Loan Count]` — right-click the value → **Show value as → Percent of row total** so each row reads as that sub-grade's status mix (%), not raw counts. Same caveat as the DAX file's design notes: this is a status-composition snapshot, not a month-over-month transition matrix. |
 | Weighted PD by vintage & sub-grade | Line chart, small multiples by grade | Axis: `Dim_Vintage[vintage]`; Values: `[Weighted PD]`; Small multiple: `Dim_Credit_Grade[grade]` |
 | Vintage curve | Line chart | Axis: `Dim_Vintage[vintage]`; Values: `[Weighted PD]`, `[Realized Default Rate]` (both series, to compare modeled vs realized risk by cohort) |
 | PD Calibration Gap | Card / gauge | `[PD Calibration Gap]` — pulls in the governance metric from `reports/model_risk_summary.json`; enter it as a manual card or a small disconnected table if you want it live in the model |
@@ -111,20 +125,30 @@ the What-If parameters from `dax/credit_risk_measures.dax`.
    Each creates a disconnected table and a `[<Name> Value]` measure automatically — these feed
    `[Stressed Expected Loss]`, `[Stress EL Delta]`, and `[Stress EL Rate %]` from the DAX file.
 
-2. **Scenario slicer:** a slicer visual on `Dim_Scenario[scenario]` (sorted via `sort_order`,
-   Section 2), bound to `Fact_Stress_Test_Scenarios`. Add cards for `Total EAD`, a
-   scenario-aware weighted-PD measure, and `Total Expected Loss` computed directly over
-   `Fact_Stress_Test_Scenarios` (these already reflect the Baseline/Adverse/Severely Adverse
-   shocks — no What-If multiplier needed on top of this table).
+2. **Scenario slicer:** a slicer visual on `Fact_Stress_Test_Scenarios[scenario]` — note the
+   column is named `scenario`, not `scenario_name`. Sort it via `Dim_Scenario[sort_order]`
+   (Section 2) if you built that table, so it reads Baseline → Adverse → Severely Adverse rather
+   than alphabetically. Add cards for `[Scenario Total EAD]`, `[Scenario Weighted PD]`, and
+   `[Scenario Total Expected Loss]` — these already reflect the Baseline/Adverse/Severely Adverse
+   shocks, no What-If multiplier needed on top of this table.
 
 3. **What-If sliders:** place the two What-If parameter slicers alongside the scenario slicer so
    a user can further stress the *currently selected* scenario interactively via
    `[Stressed Expected Loss]` (computed over `Fact_Loan_Risk_Portfolio`, not the scenario table).
 
-4. **Layout:** scenario slicer + two What-If slider slicers across the top; below, a bar chart
-   comparing `Total EAD` / `Weighted PD` / `Total Expected Loss` across the three scenarios
-   (Axis: `Dim_Scenario[scenario]`), and a card row showing the live `[Stressed Expected Loss]`
-   / `[Stress EL Delta]` from the slider-driven measures.
+4. **Waterfall — incremental capital loss by scenario:** add a **Waterfall chart** visual with
+   `Fact_Stress_Test_Scenarios[scenario]` (sorted Baseline → Adverse → Severely Adverse) as the
+   **Category** and `[Scenario Incremental EL vs Baseline]` as the **Value**. This renders as
+   Baseline sitting at $0, then each scenario's incremental Expected Loss stacking on top —
+   $2.35B added by the Adverse shock, a further $2.98B by Severely Adverse (on top of Adverse),
+   for a $10.68B severely-adverse total. A clustered bar chart with `[Scenario Total Expected
+   Loss]` by scenario works too if you'd rather show absolute totals side by side instead of the
+   cascading breakdown.
+
+5. **Layout:** scenario slicer + two What-If slider slicers across the top; the waterfall chart
+   from step 4 below that; and a card row showing the live `[Stressed Expected Loss]` /
+   `[Stress EL Delta]` from the slider-driven measures for interactive what-if exploration on top
+   of whichever scenario is selected.
 
 ### Optional extension: interest-rate shock slider
 

@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
-.claude/
+.claude/*
+!.claude/launch.json
 .pytest_cache/
 
 # Data and model artifacts (regenerate via run_pipeline.py)
