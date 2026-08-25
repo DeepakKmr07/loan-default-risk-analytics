@@ -27,7 +27,7 @@ PD_MODEL_PATH = MODEL_DIR / "pd_model.pkl"
 LGD_MODEL_PATH = MODEL_DIR / "lgd_model.pkl"
 SCORED_PORTFOLIO_PATH = PROJECT_ROOT / "data" / "processed" / "scored_portfolio.parquet"
 
-# Identifying/dimensional columns carried through for downstream BI marts (Phase 3),
+# Identifying/dimensional columns carried through for the downstream BI marts,
 # beyond the raw model features.
 PASSTHROUGH_COLUMNS = [
     "id",

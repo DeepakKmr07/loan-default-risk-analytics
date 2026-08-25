@@ -1,10 +1,9 @@
 """Master orchestration script: ETL -> Train PD/LGD -> Inference -> Curated Star Schema.
 
-Run with the project's system Python (see DEVELOPMENT.md "Environment Setup" — no venv/conda here):
-    "C:\\Program Files\\Python313\\python.exe" run_pipeline.py                  # full pipeline
-    "C:\\Program Files\\Python313\\python.exe" run_pipeline.py --stress-test    # + stress-test scenarios
-    "C:\\Program Files\\Python313\\python.exe" run_pipeline.py --test           # run the pytest suite only
-    "C:\\Program Files\\Python313\\python.exe" run_pipeline.py --dashboard      # launch the Streamlit app
+    python run_pipeline.py                  # full pipeline
+    python run_pipeline.py --stress-test    # + stress-test scenarios
+    python run_pipeline.py --test           # run the pytest suite only
+    python run_pipeline.py --dashboard      # launch the Streamlit app
 
 Note: this assumes `data/raw/loans_raw.parquet` already exists (run `src/data/download.py`
 once, with Kaggle API credentials configured, to produce it).

@@ -1,7 +1,7 @@
 """Train a LightGBM regression model for Loss Given Default (LGD) on realized, resolved defaults.
 
 Only loans with a realized `actual_lgd` (computed in the ETL stage from post-default recoveries
-net of collection fees) are used. Splitting is chronological, matching DEVELOPMENT.md rule #1.
+net of collection fees) are used. Splitting is chronological, never random-shuffled across time.
 """
 
 from __future__ import annotations

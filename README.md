@@ -483,8 +483,7 @@ is the actual point of checking this rather than assuming a tree model's interna
 │   ├── fixtures/make_synthetic_raw.py  # synthetic dataset generator, used locally and in CI
 │   └── test_*.py             # ETL contracts, star-schema referential integrity, PSI/KS unit tests
 ├── .github/workflows/tests.yml  # CI: generates synthetic data, runs the pipeline, runs pytest
-├── run_pipeline.py    # orchestrates ETL -> train -> score -> marts (+ --test / --stress-test / --dashboard)
-└── DEVELOPMENT.md     # project rules and modeling constraints set for this build
+└── run_pipeline.py    # orchestrates ETL -> train -> score -> marts (+ --test / --stress-test / --dashboard)
 ```
 
 ## Design notes & known limitations

@@ -1,13 +1,13 @@
 """DuckDB ETL: clean raw LendingClub loans, engineer risk features, and label outcomes.
 
 All transformations run as vectorized SQL directly against the raw Parquet file — the
-data is never materialized into a pandas DataFrame here (see DEVELOPMENT.md rule #2).
+data is never materialized into a pandas DataFrame here.
 
-Target definition (DEVELOPMENT.md rule #1):
+Target definition:
     default_flag = 1   if loan_status indicates a realized default/charge-off
     default_flag = 0   if loan_status == 'Fully Paid'
     default_flag = NULL for loans still active (Current, Issued, Late, In Grace Period, ...)
-Active loans are kept in the output (needed for portfolio-level EL scoring in Phase 2/3)
+Active loans are kept in the output (needed for portfolio-level EL scoring downstream)
 but must be filtered out (`WHERE default_flag IS NOT NULL`) before model training.
 """
 
@@ -111,7 +111,7 @@ SELECT
     revol_util / 100.0 AS credit_utilization,
     bc_util / 100.0 AS bankcard_utilization,
 
-    -- Target: default_flag (NULL = still active, excluded from training per DEVELOPMENT.md rule #1)
+    -- Target: default_flag (NULL = still active, excluded from model training)
     CASE
         WHEN loan_status IN {default_statuses} THEN 1
         WHEN loan_status IN {paid_statuses} THEN 0
